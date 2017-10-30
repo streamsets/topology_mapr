@@ -102,5 +102,13 @@ def main(args):
     primary_node.execute('sudo -u mapr maprcli stream create -path /sample-stream '
                          '-produceperm p -consumeperm p -topicperm p')
 
+    if args.mapr_version == '6.0.0-RC1':
+        license_commands = ['curl --user streamsets:mapr4streamsets '
+                            'http://stage.mapr.com/license/LatestDemoLicense-M7.txt > /tmp/lic',
+                            '/opt/mapr/bin/maprcli license add -license /tmp/lic -is_file true',
+                            'rm -rf /tmp/lic']
+        logger.info('Applying license ...')
+        primary_node.execute("bash -c '{}'".format('; '.join(license_commands)))
+
     logger.info('MapR Control System server is now accessible at https://%s:%s',
                 getfqdn(), mcs_server_host_port)
