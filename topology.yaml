@@ -49,6 +49,15 @@ start args:
     --predictable:
         action: store_true
         help: If specified, attempt to expose container ports to the same port number on the host
+    --sch-password:
+        help: StreamSets Control Hub password to use
+        metavar: password
+    --sch-server-url:
+        help: Server URL of the StreamSets Control Hub instance with which to interact
+        metavar: url
+    --sch-username:
+        help: StreamSets Control Hub username to use
+        metavar: username
     --sdc-version:
         help: If specified, the version of StreamSets Data Collector to install
         metavar: ver
@@ -59,3 +68,9 @@ start args:
         default: ~/.clusterdock/secure
         help: Mounts this directory to all nodes for MapR security config files
         metavar: path
+    --st-resources-directory:
+        help: If specified, a directory containing resources files to mount into the StreamSets Transformer resources
+        metavar: dir
+    --st-version:
+        help: If specified, the version of StreamSets Transformer to install
+        metavar: ver
