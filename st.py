@@ -94,6 +94,9 @@ class Transformer:
                                             'content-type': 'application/json'})
             self.sch_session.verify = True
 
+    def directories_to_create(self):
+        return [self.environment['TRANSFORMER_DATA']]
+
     def commands_for_add_user(self):
         return ['groupadd -r -g {} {}'.format(ST_USER_ID, ST_USER),
                 'useradd -r -u {} -g {} {}'.format(ST_USER_ID, ST_USER, ST_USER)]

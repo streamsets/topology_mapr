@@ -293,6 +293,11 @@ def main(args):
         for node in cluster.nodes:
             node.execute(create_user_command, quiet=quiet)
 
+        logger.debug('Creating Transformer specific directories ...')
+        for path in transformer.directories_to_create():
+            primary_node.execute('mkdir -p {}'.format(path), quiet=quiet)
+            primary_node.execute('chown -R {user}:{user} {path}'.format(user=st.ST_USER, path=path))
+
         logger.info('Creating transformer user directory in MapR-FS ...')
         create_transformer_user_directory_command = ['sudo -u mapr hadoop fs -mkdir -p /user/{}'.format(st.ST_USER),
                                                      'sudo -u mapr hadoop fs -chown {0}:{0} /user/{0}'.format(
