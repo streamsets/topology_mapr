@@ -15,6 +15,7 @@ import logging
 import os
 import re
 import tempfile
+import time
 import yaml
 from socket import gethostbyname, gethostname, socket
 
@@ -26,6 +27,11 @@ from . import st
 
 DEFAULT_NAMESPACE = 'clusterdock'
 DEFAULT_SDC_REPO = 'https://s3-us-west-2.amazonaws.com/archives.streamsets.com/datacollector/'
+DEFAULT_STF_GROUP_ID = '20149'
+DEFAULT_STF_GROUP_NAME = 'stf'
+DEFAULT_STF_USER_ID = '20149'
+DEFAULT_STF_USER_NAME = 'stf'
+DEFAULT_STF_USER_PASSWORD = 'stf'
 EARLIEST_MAPR_VERSION_WITH_LICENSE_AND_CENTOS_7 = (6, 0, 0)
 # For MEP 4.0 onwards, MAPR_MEP_VERSION env. variable is needed by setup_mapr script.
 EARLIEST_MEP_VERSION_FOR_SETUP_MAPR_SCRIPT = (4, 0)
@@ -267,6 +273,14 @@ def main(args):
                                '    <value>*</value>\n'
                                '</property>\n'
                                '<property>\n'
+                               '    <name>hadoop.proxyuser.{stf_user}.hosts</name>\n'
+                               '    <value>*</value>\n'
+                               '</property>\n'
+                               '<property>\n'
+                               '    <name>hadoop.proxyuser.{stf_user}.groups</name>\n'
+                               '    <value>*</value>\n'
+                               '</property>\n'
+                               '<property>\n'
                                '    <name>hadoop.proxyuser.{sdc_user}.hosts</name>\n'
                                '    <value>*</value>\n'
                                '</property>\n'
@@ -277,7 +291,9 @@ def main(args):
                                '<property>\n'
                                '    <name>fs.mapr.server.resolve.user</name>\n'
                                '    <value>true</value>\n'
-                               '</property>\n'.format(transformer_user=st.ST_USER, sdc_user='sdc'))
+                               '</property>\n'.format(transformer_user=st.ST_USER,
+                                                      stf_user=DEFAULT_STF_USER_NAME,
+                                                      sdc_user='sdc'))
 
     # Configure the yarn-site.xml file for external shuffle service
     yarn_site_config_file = '{}/etc/hadoop/yarn-site.xml'.format(hadoop_version_home)
@@ -307,6 +323,17 @@ def main(args):
          'ln -s {} {}'.format(hadoop_version_home, HADOOP_HOME)]
     )
     for node in cluster.nodes:
+        # Create a user that is not the mapr user in each node.  This user will be impersonated by transformer tests,
+        # since mapr has a limitation that the mapr user cannot be impersonated.
+        create_stf_user = ('groupadd -g {gid} {group} && '
+                           'useradd -g {gid} -u {uid} {user} && '
+                           'echo {password} | passwd {user} --stdin'.format(gid=DEFAULT_STF_GROUP_ID,
+                                                                            group=DEFAULT_STF_GROUP_NAME,
+                                                                            uid=DEFAULT_STF_USER_ID,
+                                                                            user=DEFAULT_STF_USER_NAME,
+                                                                            password=DEFAULT_STF_USER_PASSWORD))
+        node.execute(create_stf_user, quiet=quiet)
+
         # Update the spark-defaults.conf file on each node.
         spark_default_config = PropertiesFile.loads(node.get_file(spark_defaults_config_file))
         spark_default_config.update(spark_dynamic_allocation_config)
@@ -321,6 +348,7 @@ def main(args):
         # impersonation.  For impersonation on MapR, the transfomer user or the sdc user can impersonate.
         node.execute('touch /opt/mapr/conf/proxy/{}'.format(st.ST_USER), quiet=quiet)
         node.execute('touch /opt/mapr/conf/proxy/{}'.format('sdc'), quiet=quiet)
+        node.execute('touch /opt/mapr/conf/proxy/{}'.format(DEFAULT_STF_USER_NAME), quiet=quiet)
 
         # Update the yarn-site.xml config on each node
         yarn_site_config = node.get_file(yarn_site_config_file)
@@ -370,10 +398,12 @@ def main(args):
                                      'rm /tmp/cluster-name']
         primary_node.execute(' && '.join(register_gateway_commands), quiet=quiet)
 
-    logger.info('Creating sdc user directory in MapR-FS ...')
-    create_sdc_user_directory_command = ['hadoop fs -mkdir -p /user/sdc',
-                                         'hadoop fs -chown sdc:sdc /user/sdc']
-    primary_node.execute('; '.join(create_sdc_user_directory_command), user='mapr', quiet=quiet)
+    logger.info('Creating sdc and stf user directories in MapR-FS ...')
+    create_user_directory_command = ['hadoop fs -mkdir -p /user/sdc',
+                                     'hadoop fs -chown sdc:sdc /user/sdc',
+                                     'hadoop fs -mkdir /user/{}'.format(DEFAULT_STF_USER_NAME),
+                                     'hadoop fs -chown {0}:{0} /user/{0}'.format(DEFAULT_STF_USER_NAME)]
+    primary_node.execute('; '.join(create_user_directory_command), user='mapr', quiet=quiet)
 
     if args.sdc_version:
         logger.info('Installing StreamSets DataCollector version %s ...', args.sdc_version)
