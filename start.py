@@ -237,6 +237,16 @@ def main(args):
         primary_node.execute('maprcli node services -name hs2 -action start -nodes {}'.format(primary_node.fqdn),
                              user='mapr', quiet=quiet)
 
+    # Wait for Node Manager configuration to be complete before attempting any other configuration changes.  The only
+    # good way to do this is to look for the presence of a directory in hadoop fs.  The presence of this directory
+    # indicates that the configuration is complete.
+    def mapr_configuration_completed(node):
+        logger.debug('Waiting for MapR configuration to be completed')
+        return node.execute('hadoop fs -ls /var/mapr/local/{}/mapred/nodeManager/output.U'.format(node.fqdn),
+                            quiet=quiet).exit_code == 0
+
+    wait_for_condition(mapr_configuration_completed, condition_args=[primary_node], timeout=240)
+
     logger.info('Creating /apps/spark directory on %s ...', primary_node.hostname)
     spark_directory_command = ['hadoop fs -mkdir -p /apps/spark',
                                'hadoop fs -chmod 777 /apps/spark']
