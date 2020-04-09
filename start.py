@@ -33,6 +33,7 @@ DEFAULT_STF_USER_ID = '20149'
 DEFAULT_STF_USER_NAME = 'stf'
 DEFAULT_STF_USER_PASSWORD = 'stf'
 EARLIEST_MAPR_VERSION_WITH_LICENSE_AND_CENTOS_7 = (6, 0, 0)
+EARLIEST_MAPR_VERSION_WITH_HIVE_META_SERVICE = (6, 1, 0)
 # For MEP 4.0 onwards, MAPR_MEP_VERSION env. variable is needed by setup_mapr script.
 EARLIEST_MEP_VERSION_FOR_SETUP_MAPR_SCRIPT = (4, 0)
 MAPR_CONFIG_DIR = '/opt/mapr/conf'
@@ -219,22 +220,43 @@ def main(args):
         hive_version_str = primary_node.execute('basename `echo /opt/mapr/hive/hive-*`',
                                                 quiet=True).output.strip().split('-')[1]
         hive_version_home = '/opt/mapr/hive/hive-{}'.format(hive_version_str)
-        primary_node.execute('maprcli node services -name hs2 -action stop -nodes {}'.format(primary_node.fqdn),
-                             user='mapr', quiet=quiet)
+        primary_node.execute(
+            'maprcli node services -name {0} -action stop -nodes {1}'.format(
+                'hivemeta' if mapr_version_tuple >= EARLIEST_MAPR_VERSION_WITH_HIVE_META_SERVICE else 'hs2',
+                primary_node.fqdn), user='mapr', quiet=quiet)
 
-        def hiveserver_stopped_condition(node):
+        def hiveserver_stopped_condition(node, service):
             status = int(node.execute(
-                "maprcli service list -output terse -node {0} | grep hs2 | awk '{{print $1}}'".format(node.fqdn),
+                "maprcli service list -output terse -node {0} | grep {1} | awk '{{print $1}}'".format(node.fqdn,
+                                                                                                      service),
                 quiet=quiet).output.strip() or -1)
             # check if service status is either stopped (3) or not configured (0).
             return status in (0, 3)
 
-        wait_for_condition(condition=hiveserver_stopped_condition, condition_args=[primary_node], timeout=30)
+        wait_for_condition(condition=hiveserver_stopped_condition,
+                           condition_args=[primary_node,
+                                           'hivemeta'
+                                           if mapr_version_tuple >= EARLIEST_MAPR_VERSION_WITH_HIVE_META_SERVICE
+                                           else 'hs2'],
+                           timeout=30)
 
         primary_node.execute('rm -rf {}/bin/metastore_db'.format(hive_version_home), user='mapr', quiet=quiet)
-        primary_node.execute('cd {}/bin/ && ./schematool -dbType derby -initSchema'.format(hive_version_home), user='mapr',
-                             quiet=quiet)
-        primary_node.execute('maprcli node services -name hs2 -action start -nodes {}'.format(primary_node.fqdn),
+        primary_node.execute('cd {}/bin/ && ./schematool -dbType derby -initSchema'.format(hive_version_home),
+                             user='mapr', quiet=quiet)
+
+        # Restart both hive meta store and the hiveserver2 which depends on hive metastore. Depending on the
+        # version of MapR hive metastore service may or may not be installed.
+        if mapr_version_tuple >= EARLIEST_MAPR_VERSION_WITH_HIVE_META_SERVICE:
+            primary_node.execute(
+                'maprcli node services -name hivemeta -action start -nodes {}'.format(primary_node.fqdn), user='mapr',
+                quiet=quiet)
+        primary_node.execute('maprcli node services -name hs2 -action restart -nodes {}'.format(primary_node.fqdn),
+                             user='mapr', quiet=quiet)
+
+        # In a secure mode deployment, change the permissions so that any user can write to the hive.warehouse.dir.
+        # This is because, we impersonate user 'stf' when running tests and so that directory needs to writable by stf.
+        primary_node.execute(' && '.join(['hadoop fs -mkdir -p /user/hive/warehouse',
+                                          'hadoop fs -chmod -R 777 /user/hive/warehouse']),
                              user='mapr', quiet=quiet)
 
     # Wait for Node Manager configuration to be complete before attempting any other configuration changes.  The only
@@ -264,6 +286,29 @@ def main(args):
     # Determine the hadoop version
     hadoopversion_cmd = primary_node.execute('cat /opt/mapr/hadoop/hadoopversion', quiet=True)
     hadoop_version_home = '/opt/mapr/hadoop/hadoop-{}'.format(hadoopversion_cmd.output.strip())
+
+    # Starting with MapR 6.1.0, a separate hive metastore service is installed. Modify & copy
+    # the hive-site.xml into spark config directory, for spark-sql to work with hive.
+    hive_site_xml_contents = ''
+    if mapr_version_tuple >= EARLIEST_MAPR_VERSION_WITH_HIVE_META_SERVICE:
+        # Determine the hive version
+        hiveversion_cmd = primary_node.execute('basename `echo /opt/mapr/hive/hive-*`', quiet=True)
+        hive_version_str = hiveversion_cmd.output.strip().split('-')[1]
+        hive_version_home = '/opt/mapr/hive/hive-{}'.format(hive_version_str)
+
+        # Read the contents of the hive-site.xml. This will be copied over to the spark conf directory.
+        hive_site_xml_contents = primary_node.get_file('{}/conf/hive-site.xml'.format(hive_version_home))
+        hive_site_xml_contents = re.sub('localhost', primary_node.fqdn, hive_site_xml_contents)
+        hive_site_xml_config_string = ('<property>\n'
+                                       '   <name>hive.exec.scratchdir</name>\n'
+                                       '   <value>/tmp</value>\n'
+                                       '</property>\n'
+                                       '<property>\n'
+                                       '   <name>hive.exec.local.scratchdir</name>\n'
+                                       '   <value>/tmp</value>\n'
+                                       '</property>\n')
+        hive_site_xml_contents = re.sub('(</configuration>)', '{}\\1'.format(hive_site_xml_config_string),
+                                        hive_site_xml_contents)
 
     # Configure the dynamic allocation for MapR
     spark_defaults_config_file = '{}/conf/spark-defaults.conf'.format(spark_version_home)
@@ -319,8 +364,7 @@ def main(args):
         yarn_config_string += ('<property>\n'
                                '    <name>spark.authenticate</name>\n'
                                '    <value>true</value>\n'
-                               '</property>\n'
-                              )
+                               '</property>\n')
 
     # The location of the shuffle jar depends on the spark version.
     spark_shuffle_jar = 'yarn/spark-*-mapr-*-yarn-shuffle.jar'
@@ -348,6 +392,9 @@ def main(args):
         spark_default_config = PropertiesFile.loads(node.get_file(spark_defaults_config_file))
         spark_default_config.update(spark_dynamic_allocation_config)
         node.put_file(spark_defaults_config_file, PropertiesFile.dumps(spark_default_config))
+
+        # Put the hive-site.xml into spark config directory.
+        node.put_file('{}/conf/hive-site.xml'.format(spark_version_home), hive_site_xml_contents)
 
         # Update the core-site.xml config on each node
         core_site_config = node.get_file(core_site_config_file)

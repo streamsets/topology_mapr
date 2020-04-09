@@ -38,6 +38,7 @@ RUN yum -y install java-1.8.0-openjdk-devel \
     mapr-hbase-rest \
     mapr-historyserver \
     mapr-hive \
+    mapr-hivemetastore \
     mapr-hiveserver2 \
     mapr-httpfs \
     mapr-kafka \
