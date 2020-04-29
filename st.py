@@ -25,7 +25,7 @@ logger = logging.getLogger('clusterdock.{}'.format(__name__))
 EXTRA_LIB_IMAGE_NAME_TEMPLATE = '{}/{}/transformer:{}'
 IMAGE_NAME_TEMPLATE = '{}/{}/transformer:{}'
 
-EXTRA_LIBS_SUPPORTED = ['transformer-jdbc']
+EXTRA_LIBS_SUPPORTED = ['transformer-mapr-jdbc']
 ST_FORM_REALM_PROPERTIES_FILENAME = 'form-realm.properties'
 ST_PORT = 19630 # inline to ST build
 ST_PROPERTIES_FILE_NAME = 'transformer.properties'
