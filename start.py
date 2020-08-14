@@ -506,6 +506,11 @@ def main(args):
             primary_node.put_file(transformer_sch_properties_file_path,
                                   PropertiesFile.dumps(transformer_sch_properties))
 
+        if args.transformer_property:
+            logger.debug('Setting properties for Transformer ...')
+            properties_from_args = {item.split('=')[0]: item.split('=')[1] for item in args.transformer_property}
+            _update_transformer_properties(transformer, primary_node, properties_from_args)
+
         logger.info('Running Transformer as user %s from %s ...', st.ST_USER, transformer.home_dir)
         command_for_execute = transformer.command_for_execute()
         if args.secure:
@@ -529,6 +534,16 @@ def main(args):
 
     logger.info('MapR Control System server is now accessible at https://%s:%s',
                 hostname, mcs_server_host_port)
+
+
+# Update the Transformer properties file with properties in the argument dictionary
+def _update_transformer_properties(transformer, primary_node, transformer_properties_to_update):
+    transformer_properties_file_path = os.path.join(transformer.environment['TRANSFORMER_CONF'],
+                                                    st.ST_PROPERTIES_FILE_NAME)
+    transformer_properties_file = primary_node.get_file(transformer_properties_file_path)
+    transformer_properties = PropertiesFile.loads(transformer_properties_file)
+    transformer_properties.update(transformer_properties_to_update)
+    primary_node.put_file(transformer_properties_file_path, PropertiesFile.dumps(transformer_properties))
 
 
 # Returns wget commands and rpm package names for all the rpm packages needed.

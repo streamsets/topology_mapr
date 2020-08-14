@@ -74,3 +74,7 @@ start args:
     --st-version:
         help: If specified, the version of StreamSets Transformer to install
         metavar: ver
+    --transformer-property:
+        action: 'append'
+        default: []
+        help: <key>=<value> configuration to set in the transformer.properties file at startup
