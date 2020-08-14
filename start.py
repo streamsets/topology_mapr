@@ -24,6 +24,7 @@ from clusterdock.utils import version_tuple, wait_for_condition
 from javaproperties import PropertiesFile
 
 from . import st
+from topology_mapr.constants import DOCKER_IMAGE_TAG_GIT_HASH_LENGTH
 
 DEFAULT_NAMESPACE = 'clusterdock'
 DEFAULT_SDC_REPO = 'https://s3-us-west-2.amazonaws.com/archives.streamsets.com/datacollector/'
@@ -60,10 +61,18 @@ logger = logging.getLogger('clusterdock.{}'.format(__name__))
 
 
 def main(args):
-    quiet = not args.verbose
     if args.license_url and not args.license_credentials:
-        raise Exception('--license-credentials is a required argument if --license-url is provided.')
+        raise ValueError('--license-credentials is a required argument if --license-url is provided.')
 
+    if args.st_version:
+        if args.st_version.startswith('git:'):
+            if not len(args.st_version[4:]) >= DOCKER_IMAGE_TAG_GIT_HASH_LENGTH:
+                raise ValueError('--st-version arg with Git hash needs to be a minimum of '
+                                 f'{DOCKER_IMAGE_TAG_GIT_HASH_LENGTH} characters')
+        elif args.st_version.find('.') == -1:
+            raise ValueError('--st-version arg needs to be a <version> or Git hash in <git:hash> format')
+
+    quiet = not args.verbose
     image_prefix = '{}/{}/clusterdock:mapr{}'.format(args.registry,
                                                      args.namespace or DEFAULT_NAMESPACE,
                                                      args.mapr_version)
@@ -113,9 +122,15 @@ def main(args):
     # If transformer is specified, add it to the cluster.
     transformer = None
     if args.st_version:
-        transformer = st.Transformer(args.st_version, args.namespace or 'streamsets', args.registry,
-                                     args.st_resources_directory,
-                                     args.sch_server_url, args.sch_username, args.sch_password)
+        transformer_args = {'namespace': args.namespace or 'streamsets', 'registry': args.registry,
+                            'resources_directory': args.st_resources_directory, 'sch_server_url': args.sch_server_url,
+                            'sch_username': args.sch_username, 'sch_password': args.sch_password}
+        if args.st_version.startswith('git:'):
+            transformer_args['git_hash'] = args.st_version[4:]
+        else:
+            transformer_args['version'] = args.st_version
+        transformer = st.Transformer(**transformer_args)
+
         logger.debug('Adding transformer ports to primary node ...')
         primary_node.ports.append({st.ST_PORT: st.ST_PORT} if args.predictable else st.ST_PORT)
 

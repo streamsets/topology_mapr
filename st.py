@@ -20,6 +20,8 @@ import docker
 import requests
 from clusterdock.utils import join_url_parts
 
+from topology_mapr.constants import DOCKER_IMAGE_TAG_GIT_HASH_LENGTH
+
 logger = logging.getLogger('clusterdock.{}'.format(__name__))
 
 EXTRA_LIB_IMAGE_NAME_TEMPLATE = '{}/{}/transformer:{}'
@@ -40,22 +42,27 @@ docker_client = docker.from_env(timeout=300)
 
 
 class Transformer:
-    def __init__(self, version, namespace, registry, resources_directory=None,
+    def __init__(self, namespace, registry, version=None, git_hash=None, resources_directory=None,
                  sch_server_url=None, sch_username=None, sch_password=None):
-        self.version = version
-        self.numeric_version, self.version_specifier = ((version, None) if not '-' in version
-                                                        else version.split('-', maxsplit=1))
-        self.image_name = IMAGE_NAME_TEMPLATE.format(registry, namespace, self.version)
+        if not any([version, git_hash]):
+            raise ValueError('One of the parameter is required: version, git_hash')
+
+        if version and git_hash:
+            raise ValueError('Provide only version or git_hash parameter')
+
+        image_tag = version or git_hash[0:DOCKER_IMAGE_TAG_GIT_HASH_LENGTH]
+        self.image_name = IMAGE_NAME_TEMPLATE.format(registry, namespace, image_tag)
+        self.image_labels = self._inspect_and_get_image_labels(self.image_name)
         self.extra_lib_images = [EXTRA_LIB_IMAGE_NAME_TEMPLATE.format(registry, namespace, image)
                                  for image in EXTRA_LIBS_SUPPORTED]
+
+        # For git_hash arg, version arg is not passed, derive it based on Transformer image label
+        self.version = version if version else self.image_labels['transformer-tag-version']
 
         self.sch_server_url = sch_server_url
         self.sch_username = sch_username
         self.sch_password = sch_password
         self.sch_organization = self.sch_username.split('@')[1] if self.sch_username else None
-
-        logger.info('Attempting to pull newest Transformer image (%s) ...', self.image_name)
-        docker_client.images.pull(self.image_name)
 
         container = docker_client.api.create_container(image=self.image_name)['Id']
         raw_env_vars = docker_client.api.inspect_container(container).get('Config').get('Env')
@@ -93,6 +100,12 @@ class Transformer:
                                             'X-SS-REST-CALL': 'true',
                                             'content-type': 'application/json'})
             self.sch_session.verify = True
+
+    def _inspect_and_get_image_labels(self, image_name):
+        logger.info('Attempting to pull newest Transformer image (%s) ...', image_name)
+        docker_client.images.pull(image_name)
+        inspect_image_results = docker_client.api.inspect_image(image_name)
+        return inspect_image_results['ContainerConfig']['Labels']
 
     def directories_to_create(self):
         return [self.environment['TRANSFORMER_DATA']]

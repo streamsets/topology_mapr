@@ -72,7 +72,8 @@ start args:
         help: If specified, a directory containing resources files to mount into the StreamSets Transformer resources
         metavar: dir
     --st-version:
-        help: If specified, the version of StreamSets Transformer to install
+        help: If specified, the version of StreamSets Transformer to install. This can be a <version> or
+            Git hash as in <git:hash> format
         metavar: ver
     --transformer-property:
         action: 'append'
