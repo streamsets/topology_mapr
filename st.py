@@ -20,8 +20,6 @@ import docker
 import requests
 from clusterdock.utils import join_url_parts
 
-from topology_mapr.constants import DOCKER_IMAGE_TAG_GIT_HASH_LENGTH
-
 logger = logging.getLogger('clusterdock.{}'.format(__name__))
 
 EXTRA_LIB_IMAGE_NAME_TEMPLATE = '{}/{}/transformer:{}'
@@ -50,14 +48,14 @@ class Transformer:
         if version and git_hash:
             raise ValueError('Provide only version or git_hash parameter')
 
-        image_tag = version or git_hash[0:DOCKER_IMAGE_TAG_GIT_HASH_LENGTH]
+        image_tag = version or git_hash
         self.image_name = IMAGE_NAME_TEMPLATE.format(registry, namespace, image_tag)
         self.image_labels = self._inspect_and_get_image_labels(self.image_name)
         self.extra_lib_images = [EXTRA_LIB_IMAGE_NAME_TEMPLATE.format(registry, namespace, image)
                                  for image in EXTRA_LIBS_SUPPORTED]
 
         # For git_hash arg, version arg is not passed, derive it based on Transformer image label
-        self.version = version if version else self.image_labels['transformer-tag-version']
+        self.version = version if version else self.image_labels['com.streamsets.transformer-tag-version']
 
         self.sch_server_url = sch_server_url
         self.sch_username = sch_username

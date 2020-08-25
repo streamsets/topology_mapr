@@ -24,7 +24,6 @@ from clusterdock.utils import version_tuple, wait_for_condition
 from javaproperties import PropertiesFile
 
 from . import st
-from topology_mapr.constants import DOCKER_IMAGE_TAG_GIT_HASH_LENGTH
 
 DEFAULT_NAMESPACE = 'clusterdock'
 DEFAULT_SDC_REPO = 'https://s3-us-west-2.amazonaws.com/archives.streamsets.com/datacollector/'
@@ -64,13 +63,8 @@ def main(args):
     if args.license_url and not args.license_credentials:
         raise ValueError('--license-credentials is a required argument if --license-url is provided.')
 
-    if args.st_version:
-        if args.st_version.startswith('git:'):
-            if not len(args.st_version[4:]) >= DOCKER_IMAGE_TAG_GIT_HASH_LENGTH:
-                raise ValueError('--st-version arg with Git hash needs to be a minimum of '
-                                 f'{DOCKER_IMAGE_TAG_GIT_HASH_LENGTH} characters')
-        elif args.st_version.find('.') == -1:
-            raise ValueError('--st-version arg needs to be a <version> or Git hash in <git:hash> format')
+    if args.st_version and not product_version_is_valid(args.st_version):
+        raise ValueError('--st-version arg needs to be a <version> or Git hash in git:<hash> format')
 
     quiet = not args.verbose
     image_prefix = '{}/{}/clusterdock:mapr{}'.format(args.registry,
@@ -635,3 +629,8 @@ def _install_streamsets_datacollector(primary_node, sdc_version, mapr_version, m
         primary_node.execute('systemctl start sdc; systemctl enable sdc', quiet=quiet)
     else:
         primary_node.execute('service sdc start; chkconfig --add sdc', quiet=quiet)
+
+
+def product_version_is_valid(version):
+    return ((not version.startswith('git:') and '.' in version) or
+            (version.startswith('git:') and '.' not in version))

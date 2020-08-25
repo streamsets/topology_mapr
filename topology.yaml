@@ -73,7 +73,7 @@ start args:
         metavar: dir
     --st-version:
         help: If specified, the version of StreamSets Transformer to install. This can be a <version> or
-            Git hash as in <git:hash> format
+            Git hash as in git:<hash> format
         metavar: ver
     --transformer-property:
         action: 'append'
