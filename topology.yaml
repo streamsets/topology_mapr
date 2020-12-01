@@ -75,6 +75,10 @@ start args:
         help: If specified, the version of StreamSets Transformer to install. This can be a <version> or
             Git hash as in git:<hash> format
         metavar: ver
+    --scala-version:
+        choices: ['2.11', '2.12']
+        help: If specified, the version of Scala to use in Transformer
+        default: '2.11'
     --transformer-property:
         action: 'append'
         default: []

@@ -18,7 +18,7 @@ import os
 
 import docker
 import requests
-from clusterdock.utils import join_url_parts
+from clusterdock.utils import join_url_parts, Version
 
 logger = logging.getLogger('clusterdock.{}'.format(__name__))
 
@@ -36,19 +36,29 @@ DEFAULT_SCH_API_VERSION = 1
 SCH_APPLICATION_TOKEN_FILE_NAME = 'application-token.txt'
 SCH_PROPERTIES_FILE_NAME = 'dpm.properties'
 
+# Minimum Transformer version supporting both Scala 2.11 and Scala 2.12.
+TRANSFORMER_MIN_VERSION_WITH_DIFF_SCALA_VERSIONS = '3.17.0'
+
 docker_client = docker.from_env(timeout=300)
 
 
 class Transformer:
     def __init__(self, namespace, registry, version=None, git_hash=None, resources_directory=None,
-                 sch_server_url=None, sch_username=None, sch_password=None):
+                 sch_server_url=None, sch_username=None, sch_password=None, scala_version=None):
         if not any([version, git_hash]):
             raise ValueError('One of the parameter is required: version, git_hash')
 
         if version and git_hash:
             raise ValueError('Provide only version or git_hash parameter')
 
+        if (version and Version(version) >= Version(TRANSFORMER_MIN_VERSION_WITH_DIFF_SCALA_VERSIONS)
+           and not scala_version):
+            raise ValueError('scala_version is required if version >= {}'.format(
+                             TRANSFORMER_MIN_VERSION_WITH_DIFF_SCALA_VERSIONS))
+
         image_tag = version or git_hash
+        if Version(version) >= Version(TRANSFORMER_MIN_VERSION_WITH_DIFF_SCALA_VERSIONS):
+            image_tag = 'scala-{}_{}'.format(scala_version, image_tag)
         self.image_name = IMAGE_NAME_TEMPLATE.format(registry, namespace, image_tag)
         self.image_labels = self._inspect_and_get_image_labels(self.image_name)
         self.extra_lib_images = [EXTRA_LIB_IMAGE_NAME_TEMPLATE.format(registry, namespace, image)

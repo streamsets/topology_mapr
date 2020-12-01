@@ -118,7 +118,8 @@ def main(args):
     if args.st_version:
         transformer_args = {'namespace': args.namespace or 'streamsets', 'registry': args.registry,
                             'resources_directory': args.st_resources_directory, 'sch_server_url': args.sch_server_url,
-                            'sch_username': args.sch_username, 'sch_password': args.sch_password}
+                            'sch_username': args.sch_username, 'sch_password': args.sch_password, 'scala_version':
+                            args.scala_version}
         if args.st_version.startswith('git:'):
             transformer_args['git_hash'] = args.st_version[4:]
         else:
