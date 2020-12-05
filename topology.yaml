@@ -76,9 +76,9 @@ start args:
             Git hash as in git:<hash> format
         metavar: ver
     --scala-version:
-        choices: ['2.11', '2.12']
+        default: None
         help: If specified, the version of Scala to use in Transformer
-        default: '2.11'
+        nargs: '?'
     --transformer-property:
         action: 'append'
         default: []

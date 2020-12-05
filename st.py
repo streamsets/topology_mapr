@@ -57,7 +57,7 @@ class Transformer:
                              TRANSFORMER_MIN_VERSION_WITH_DIFF_SCALA_VERSIONS))
 
         image_tag = version or git_hash
-        if Version(version) >= Version(TRANSFORMER_MIN_VERSION_WITH_DIFF_SCALA_VERSIONS):
+        if scala_version:
             image_tag = 'scala-{}_{}'.format(scala_version, image_tag)
         self.image_name = IMAGE_NAME_TEMPLATE.format(registry, namespace, image_tag)
         self.image_labels = self._inspect_and_get_image_labels(self.image_name)
