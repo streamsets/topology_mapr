@@ -76,7 +76,7 @@ start args:
             Git hash as in git:<hash> format
         metavar: ver
     --scala-version:
-        default: None
+        default: !!null
         help: If specified, the version of Scala to use in Transformer
         nargs: '?'
     --transformer-property:
